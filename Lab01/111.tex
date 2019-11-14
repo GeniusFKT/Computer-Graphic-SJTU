@@ -1,0 +1,195 @@
+\documentclass[UTF8]{ctexart}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{subfigure}
+\title{实验一 \quad 三维网格模型操作 }	
+\CTEXsetup[format={\Large\bfseries}]{section}
+\date{}
+\author{严铖 \quad 517021910823}
+\begin{document}
+\maketitle
+
+\section{实验目的与基本要求}
+
+\begin{enumerate}
+    \item 掌握Obj文件的读入；(读入提供的dragon.obj文件)
+    \item 利用给定的数据结构类，建立读入网格模型数据结构；
+    \item 利用OpenGL类库，对三维模型进行绘制；
+    \item 利用OpenGL类库，增加采用鼠标交互方式对三维模型进行旋转、放缩、平移等操作；
+    \item 利用OpenGL类库，添加光照，渲染效果；
+    \item 利用OenGL类库，进行材质设定，实现半透明效果。
+\end{enumerate}
+
+\section{实验步骤}
+\par
+本次实验基于LearnOpenGL CN教程完成，教程网址为：https://learnopengl-cn.github.io。
+在此向教程的作者表示由衷的感谢。
+\par
+实验中使用的是GLFW环境以及开源库GLAD，均使用的是最新版本。
+此外，OpenGL的数学库glm也会在实验中被使用。
+\par
+以下，根据实验的基本要求，我们分别讨论各项所需的实验步骤
+
+\subsection{obj文件的读入}
+\par
+实验所提供的obj文件主要由以下两部分组成：各个顶点在世界坐标系下的位置以及每个三角形面所用到的顶点。
+考虑OpenGL的数据结构特性，我们将所读的数据存储在两个一维向量\verb|vertices, faces|中
+(相同点的三个分量坐标按顺序存储，一个顶点全部存储完了再存储下一个顶点)。
+但由于在之后的数组索引中顶点下标应从0开始，而obj文件内顶点索引从1开始，所以在读入时对索引进行减一的预处理。
+\par
+因此我们定义函数:\verb|void read_data(string filename);|
+其中\verb|filename|为文件所在的路径。该函数将文件读入并把数据存储在向量里面。
+\par
+\textbf{函数的实现：}
+函数基于c++的\verb|fstream|库读入文件，对文件进行逐行读取。文件内每行的第一个字符可作为数据的标识符
+（点为v，面为f），逐行处理，直到文件读完为止。函数具体的实现可参见源代码。
+
+\subsection{模型的绘制}
+\par
+有了存储三维模型信息的两个向量\verb|vertices, faces|，我们便可以使用OpenGL对模型进行绘制了。
+
+\subsubsection{窗口的建立}
+\par
+首先当然应该构建显示模型的窗口，经过相关资料的查询，代码截图如下所示
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{1.png}
+	\caption{窗口创建代码}
+	\label{fig:1}
+\end{figure}
+\par
+该段代码对GLFW进行了初始化，并建立了一个窗口变量\verb|windows|
+\par
+类似的，我们也对glad进行初始化，具体过程不再赘述。
+
+\subsubsection{着色器}
+\par
+在实验中，我们使用一个自己写的着色器类。
+创建一个该类的对象需要有两个参数：顶点着色器代码文件路径以及片段着色器代码文件路径。
+着色器对象创建时会编译这两个代码文件，具体的实现可见源代码
+\\\verb|shader.h, vs.txt, fs.txt|
+
+\subsubsection{VBO,VAO,EBO的建立}
+\par
+VBO为顶点缓冲对象，用于管理储存顶点数据的内存。我们会调用相关的函数，将已经读入顶点坐标数据的向量
+\verb|vertices|缓存到VBO对象中
+\par
+VAO为顶点数组对象，随后的顶点属性调用均会存储在VAO对象之中。
+\par
+EBO为索引缓冲对象，用于管理绘制模型所需要的各项索引（即为\verb|faces|内的顶点标识）。
+与VBO类似，我们也将向量\verb|faces|与EBO对象进行绑定。
+\par
+相关的代码如下图所示：
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{2.png}
+	\caption{VBO,VAO,EBO创建代码}
+	\label{fig:2}
+\end{figure}
+
+\subsubsection{渲染循环}
+\par
+有了这些对象，我们就可以开始进行渲染了。由于我们希望实时看到画面，我们就需要写一个while循环对模型进行实时的渲染。
+在渲染循环中，首先进行窗口颜色的设置，其次激活我们刚刚定义的着色器，最后调用相关的画图函数就可以看到一只龙了。
+\par
+但是由于还没有加入光照、材质、深度等相关信息，所以暂时只能看到一个三维模型的二维投影。
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{3.png}
+	\caption{渲染循环相关代码}
+	\label{fig:3}
+\end{figure}
+
+\subsection{键鼠交互}
+
+\subsubsection{摄像机类}
+\par
+为了实现对于平移、旋转等交互方式的实现，我们需要自己定义一个摄像机类。
+摄像机类的对象定义了我们观察物体所在的视点，
+变换矩阵\verb|model, view, projection|可通过摄像机内计算得出的数据进行实时的改变以达到视角的变换。
+该类的具体实现详见源代码\verb|camera.h|
+
+\subsubsection{平移}
+\par
+对于平移操作，我们使用键盘WASD四个键的输入进行控制。
+在每个渲染循环之中，我们会对四个键的状态进行分析，如果某个键被触发，就将我们的摄像机向某个方向以一个恒定的速率进行移动。
+处理平移的函数代码如下图所示：
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{4.png}
+	\caption{平移处理}
+	\label{fig:4}
+\end{figure}
+\par
+其中\verb|deltaTime|为循环一次所相间隔的时间并以此为依据进行速度的调控。
+
+\subsubsection{缩放}
+\par
+缩放与平移完全类似。
+我们使用鼠标的滚轮进行画面的缩放，读取鼠标滚轮需要对缩放函数进行注册从而得到滚轮偏移的大小。
+之后将偏移值读入摄像机处理缩放的函数方法之中进行处理。
+
+\subsubsection{旋转}
+\par
+对物体的旋转与前两个交互略有不同。前两个的处理是对摄像机视角变换的处理，而旋转是对物体本身的变动。
+因此在旋转中应当直接用鼠标移动的偏移量去改变\verb|model|矩阵中的值而摄像机方位不变。
+类似的，我们也需要将旋转处理函数进行注册以得到鼠标移动的偏移量。
+旋转的实现函数如图所示：
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{5.png}
+	\caption{旋转处理}
+	\label{fig:5}
+\end{figure}
+
+\subsection{光照}
+\par
+在加入光照效果之前，我们应当首先进行各个顶点法向量的计算。
+顶点的法向量定义为所有经过该顶点的面的法向量之和。因此我们要对我们的数据进行一些新的处理，
+在向量\verb|vertices|之中，在每个顶点后加入其相应的标准化法向量的三维坐标（这样每一个顶点就有六个参数了）。
+与此同时，对一些相关的函数进行参数的调整。
+\par
+我们使用上课所介绍的冯氏光照模型对我们的三维对象进行渲染。
+在主程序中，我们需要提供的是：光源的所在位置，视点所在的位置，光的颜色以及物体的颜色。
+将这四个参数传入着色器之中，着色器就可以根据我们既定的需要对物体进行渲染了。
+\par
+改变后的片段着色器以实现冯氏光照模型的代码如下所示：
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{6.png}
+	\caption{实现了冯氏光照模型的片段着色器主函数}
+	\label{fig:6}
+\end{figure}
+
+\subsection{半透明材质}
+\par
+半透明材质的设定十分简单，在片段着色器之中，我们输出的颜色是一个有四个分量的向量。
+其中前三个分量为代表RGB的颜色三元组，而最后一个为物体的透明度$\alpha$，其值通常默认为1。
+因此我们调整$\alpha$至一个小于1的参数，并且将OpenGL的混合模式开启，就可以看到半透明材质的龙了。
+\par
+最后所绘制的龙如图所示：
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{7.png}
+	\caption{实现了各项要求的最终模型}
+    \label{fig:7}
+\end{figure}
+
+\section{实验小结}
+\par
+本次实验我对OpenGL类库以及模型从构建到渲染等步骤都有了一个很深刻的认识。
+在实验之中由于对相关函数的不熟悉，走了许许多多的弯路。
+从创建窗口到看到画面之中的第一个二维模型就花了我两天的时间
+（一个参数忘记设置直接导致画面无法显示，让我对照相关材料好一会时间才找到自己的错误）。
+\par
+实验让我对c++编程以及面向对象的思想有了更好的掌握，有了相关的类，
+在未来调用一些方法以及对类内进行不断地扩充也会更加的方便。
+
+
+\end{document}

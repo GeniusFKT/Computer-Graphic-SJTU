@@ -1,0 +1,253 @@
+\documentclass[UTF8]{ctexart}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{subfigure}
+\title{实验二 \quad 跑跑卡丁车 }	
+\CTEXsetup[format={\Large\bfseries}]{section}
+\date{}
+\author{严铖 \quad 517021910823}
+\begin{document}
+\maketitle
+
+\section{实验目的与基本要求}
+\begin{enumerate}
+	\item 熟练掌握和综合运用OpenGL编程技术来开发简单的三维交互式游戏
+\end{enumerate}
+
+\section{实验内容}
+\begin{enumerate}
+    \item 设计并绘制一辆汽车模型（该模型可以是导入的OBJ模型）以及一个简单的直线跑道；缺省视图是从外面一个固定的视点观察汽车和跑道
+    \item 在缺省视图下，绘制汽车在跑道上的阴影（自定义一个假想的点光源）
+    \item 利用鼠标和键盘控制汽车前进、后退、转弯、加速和减速
+    \item 定义对应于ReShape事件的回调函数，使得当用户改变窗口的大小时，显示的汽车不会变形	
+    \item 采用弯曲的封闭的跑道
+    \item 制作一个弹出菜单，上面的菜单项用来自定义小车的部分部件如车轮、车体颜色等以及退出程序
+    \item 在路边设置一些路标，对于地面、跑道、天空进行纹理映射等以增强逼真度
+    \item 除了缺省视图之外，支持第二种视图：坐在车内从驾驶座位向前看的视图。两种视图之间用“t”键进行切换
+\end{enumerate}
+
+\section{实验步骤}
+\par
+本次实验基于LearnOpenGL CN教程完成，教程网址为：https://learnopengl-cn.github.io。
+在此向教程的作者表示由衷的感谢。
+\par
+实验中使用的是GLFW环境以及开源库GLAD，均使用的是最新版本。
+此外，OpenGL的数学库glm也会在实验中被使用。
+\par
+以下，根据实验内容，我们分别讨论各项所需的实验步骤
+
+\subsection{汽车模型、跑道、路标的绘制}
+\par
+在上一次实验绘制龙模型的基础上，我们使用自己写的模型导入库进行模型、纹理等的导入。
+具体代码可参见源代码model.h以及mesh.h，其中mesh.h构造了绘图的一个基本单元mesh，
+model.h在mesh库的基础上，通过外部库assimp对obj以及相关联的mtl文件进行读取，
+再将读取到的assimp格式的数据转换成库内置的一个mesh向量。
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{1.png}
+	\caption{Model类构造函数代码截图}
+	\label{fig:1}
+\end{figure}
+
+\par
+我在网络上找到了汽车模型、跑道以及路标等的obj、mtl文件以及其附带的纹理。
+因此我们构造三个model对象分别对应三个模型，构造函数的参数为obj文件所在的路径。
+（助教如希望在自己的电脑上运行程序，请现将构造函数的路径改为自己电脑相关文件所在的路径）
+再根据各个模型的大小、所在的位置、朝向等调整每个模型相应的model矩阵，
+便可以将三者组合在合适的位置上。
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{2.png}
+	\caption{实验中使用的汽车模型}
+	\label{fig:2}
+\end{figure}
+
+
+\subsection{ReShape事件}
+\par
+ReShape事件对应着OpenGL窗口大小的改变。因此我们需要注册一个相对应的回调函数。
+
+\par
+GLFW的\verb|glfwSetWindowSizeCallback()|函数便能够对窗口大小的改变做出反应。
+我们将自己定义的\verb|reshape|函数作为其参数，
+其中\verb|reshape|函数将实时变化的窗口的长、宽大小复制到我们的全局变量\verb|WIDTH, HEIGHT|中，
+以进行画面及时的调整。
+
+\subsection{汽车的运动}
+\par
+我们的汽车应当能够做到如下运动：前进、后退、转弯、加速以及减速。
+以下我们分别讨论各个运动方式的实现。
+
+\subsubsection{前进与后退}
+\par
+为了实现汽车的运动，我们定义一个全局变量\verb|v|表示汽车前后运动的速度。
+在\verb|processInput()|函数内，如果按键W被触发，则在\verb|deltaTime|时间内，
+我们定义：速度将自增加10。反之，若S被触发，则速度自减10。
+
+\par
+当然，速度不能无限地增加或减少下去，因此我们定义变量\verb|max_v|，来决定速度的最大上限。
+若速度大于了该值，则让其等于这个最大值（负值也同理）。
+
+\par 
+此外，我们增加了一个摩擦力系统。在每个单位时间，汽车都会受到一定的与速度方向相反的阻力。
+该阻力使速度的绝对值减少0.5，若速度为0或较小时则不改变。
+
+\par
+因此有了速度变量\verb|v|，我们便可以在处理完按键事件更新了变量后，对汽车的\verb|model|矩阵进行
+相对应的translate调整了
+
+
+\subsubsection{加速与减速}
+\par
+在上述的运动系统中，加速与减速的解决就十分简单了。
+
+\par
+对于加速，我们将\verb|max_v|变量调大以获得更高的最大速度，同时将单位时间自增的速度增大以获得更高的加速度，
+从而实现汽车的加速。
+
+\par
+对于减速，我们做的是增大摩擦力的大小，其作用甚至大于汽车的动力对速度的影响从而实现刹车。
+
+
+\subsubsection{转弯}
+\par
+转弯的实现较上述两种情况就相对更加复杂一些了。我们用一个稍微简单的模型以实现汽车的转弯。
+以下以按下W与A键向左转弯为例。
+
+\par
+在转弯时视为小车模型在绕着车后轮轴所在直线上的某一点进行圆周运动。
+如小车要向左转弯时，则小车绕着距离后轴中心\verb|r|处左侧的轴进行旋转。
+
+\par
+基于这种想法，当W与A被同时按下时，我们会通过几何关系自动计算出这个轴在世界坐标系下的位置，
+再通过translate和rotate调整使汽车进行相应的转动。具体的实现请参见源代码文件myFunction.h。
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.7\textwidth]{3.png}
+	\caption{转弯代码部分截图}
+	\label{fig:3}
+\end{figure}
+
+
+\newpage
+
+\subsection{阴影的绘制}
+\par
+首先我们应当绘制深度贴图，其本质是一种由光渲染的深度纹理。
+因此与纹理的初始构造类似，我们生成我们的深度贴图\verb|depthmap|，
+但是一些相关函数的参数可能会根据深度贴图的需要发生少许的变化。
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{4.png}
+	\caption{depthmap的初始化}
+	\label{fig:4}
+\end{figure}
+
+\par
+在真正绘制我们的几个物体之前，我们应当以光的透视图进行场景的渲染。
+因此我们构建一个简单的着色器simpleDepthShader，
+在顶点着色器中通过传入的光变换矩阵将视图转换，而片段着色器并不做其他作用。
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{5.png}
+	\caption{深度着色器中的顶点着色器内容}
+	\label{fig:5}
+\end{figure}
+
+\par
+在渲染循环的开始，我们先对光变换矩阵进行计算。其满足公式\\$lightSpaceMatrix = lightProjection \times lightView$。
+其中$lightView$为以光源看向原点的lookAt矩阵，而lightProjection为透视变换矩阵。
+将计算得出的光变换矩阵传入深度着色器中，最后我们用这个着色器依次渲染各个物体，并存储深度贴图。
+
+\par
+有了深度贴图纹理之后，我们便可以将其导入我们之后真正绘制物体的着色器之中进行阴影的计算了。
+绘制过程不再赘述，在绘制之前应用深度贴图即可。在着色器内计算阴影的函数如下图所示：
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{6.png}
+	\caption{阴影计算代码部分截图}
+	\label{fig:6}
+\end{figure}
+
+\par 
+绘制出的阴影效果如图中所示：
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{7.png}
+	\caption{小车及路面上的阴影}
+	\label{fig:7}
+\end{figure}
+
+
+\subsection{驾驶座视图}
+\par
+为了实现第二种视图，我们应当再定义一个新的摄像机\verb|camera_fol|，
+与之前缺省视图不同的是，这个摄像机的位置与朝向都是随着车的运动时时刻刻在改变的。
+因此在这个相机初始化的时候，其位置应当等同于汽车驾驶位上的某一点在世界坐标系下的位置，
+其朝向应当与车头的正向相同。这些在经过一系列实验后便可以得到正确的参数。
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{8.png}
+	\caption{驾驶座视图上的视野}
+	\label{fig:8}
+\end{figure}
+
+\par
+与此同时，我们通过\verb|processInput|函数内对键盘上t键的检测进行模式上的变换。
+如模式改变，则在绘制图形的着色器中上传的\verb|view, projection,| \verb|viewPos|等矩阵就由另一个摄像机所提供，
+从而进行视角上的变换。
+
+
+
+\subsection{天空盒的绘制}
+\par
+天空盒本质上是一种立体贴图。
+立方体贴图由六个正方形的二维贴图组成，
+在给出了方向向量之后，只要正方体的中心在世界坐标轴的原点，便可以将贴图上的一点投射到远处的平面中。
+
+\par
+与其他纹理的创建类似，立方体贴图的构建如图中的代码所示：
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{9.png}
+	\caption{立方体贴图构造代码}
+    \label{fig:9}
+\end{figure}
+
+\par
+其中函数\verb|loadCubemap()|使用\verb|stb_image|库提取路径下的纹理，并返回一个纹理ID。
+
+\par
+在创建了纹理之后，便需要在场景中进行渲染。我们在绘制物体之后进行这个步骤，其使用一个新的着色器进行渲染。
+具体的着色器内容可参见源代码shadow\_fs.txt, shadow\_vs.txt。绘制出的天空盒如下图所示：
+
+\begin{figure}[h]
+	\centering
+	\includegraphics*[width=0.9\textwidth]{10.png}
+	\caption{天空盒的一面}
+    \label{fig:10}
+\end{figure}
+
+\section{实验小结}
+\par
+本次实验我对OpenGL类库以及模型从构建到渲染等步骤都有了一个很深刻的认识。
+相较于第一次实验，我了解了更多高级的光照、渲染技巧，明白了其之中蕴含的数学及计算机原理。
+\par
+实验让我对c++编程以及面向对象的思想有了更好的掌握，
+有了model及mesh类，对于未来对数据模型的导入便只需提供文件所在的路径即可，十分方便。
+\par
+但是可能仍然有一些选做的要求未能完成。例如弹出式菜单的制作在GLFW内并不提供支持，
+而在OpenGL的另外一个类库GLUT有提供相对应的接口。因此由于使用的库的局限性，无法完成弹出式菜单的制作，
+如果未来有机会，我也希望对GLUT库也能有一些更加深刻的了解。
+
+
+\end{document}
